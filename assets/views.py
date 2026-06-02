@@ -6,6 +6,7 @@ from accounts.permissions import IsManager, IsManagerOrReadOnly
 from .serializers import AssetCategorySerializer, StaffAssetSerializer, ManagerAssetSerializer
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
+from audit.utils import log_action
 
 class AssetCategoryListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsManagerOrReadOnly]
@@ -31,8 +32,25 @@ class AssetListCreateView(generics.ListCreateAPIView):
 
         return queryset
 
+#    def perform_create(self, serializer):
+#       serializer.save(created_by=self.request.user)
+
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        asset = serializer.save(created_by=self.request.user)
+
+        log_action(
+            user=self.request.user,
+            action='CREATE',
+            model_name='Asset',
+            object_id=asset.id,
+            object_display=f'{asset.asset_name} [{asset.current_status}]',
+            new_values={
+                'asset_name': asset.asset_name,
+                'serial_number': asset.serial_number,
+                'category': asset.category.name,
+            },
+            request=self.request
+        )
 
     def get_serializer_class(self):
         user = self.request.user
@@ -65,12 +83,29 @@ class AssetDetailView(generics.RetrieveUpdateDestroyAPIView):
                 {'detail': 'Cannot delete an asset that is under maintenance.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        old_status = obj.current_status
+
         obj.current_status = Asset.Status.RETIRED
         obj.save()
+
+        log_action(
+            user=request.user,
+            action='STATUS_CHANGE',
+            model_name='Asset',
+            object_id=obj.id,
+            object_display=f'{obj.asset_name} [RETIRED]',
+            old_values={'current_status': old_status},
+            new_values={'current_status': Asset.Status.RETIRED},
+            request=request
+        )
+
         return Response(
             {'detail': f'{obj.asset_name} has been retired.'},
             status=status.HTTP_200_OK
         )
+    
+
 
     def get_serializer_class(self):
         user = self.request.user

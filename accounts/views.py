@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from .models import User
 from .serializers import UserManagementSerializer, CreateUserSerializer
 from .permissions import IsManager
+from audit.utils import log_action
 
 class UserListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsManager]
@@ -31,6 +32,17 @@ def login_view(request):
         
         if user is not None:
             login(request, user)
+
+            # Log successful login
+            log_action(
+                user=user,
+                action='LOGIN',
+                model_name='User',
+                object_id=user.id,
+                object_display=f'{user.get_full_name()} ({user.email})',
+                request=request
+            )
+
             return redirect('dashboard')
         else:
             error = 'Invalid email or password.'
@@ -40,7 +52,19 @@ def login_view(request):
 
 def logout_view(request):
     if request.method == 'POST':
+        user = request.user
         logout(request)
+
+        # Log logout after session is destroyed
+        log_action(
+            user=user,
+            action='LOGOUT',
+            model_name='User',
+            object_id=user.id,
+            object_display=f'{user.get_full_name()} ({user.email})',
+            request=request
+        )
+
         return redirect('login')
 
 

@@ -1,3 +1,4 @@
+from audit.utils import log_action
 from rest_framework import generics, status
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
@@ -25,12 +26,19 @@ class MaintenanceRequestListCreateView(generics.ListCreateAPIView):
         
         return MaintenanceRequest.objects.filter(requested_by=user)
 
+    # def perform_create(self, serializer):
+    #     if self.request.user.is_read_only:
+    #         return Response(
+    #             {'detail': 'Auditors cannot submit requests.'},
+    #             status=status.HTTP_403_FORBIDDEN
+    #         )
+    #     serializer.save(requested_by=self.request.user)
+
+    # The above code is changed to this; we want to raise an exception instead of returning a response, since perform_create is not designed to return HTTP responses.
     def perform_create(self, serializer):
         if self.request.user.is_read_only:
-            return Response(
-                {'detail': 'Auditors cannot submit requests.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Auditors cannot submit requests.')
         serializer.save(requested_by=self.request.user)
 
 
@@ -56,6 +64,26 @@ class MaintenanceRequestDetailView(generics.RetrieveUpdateDestroyAPIView):
 
         return obj
 
+# NEW CODE: Override update to log status changes
+    def perform_update(self, serializer):
+        request_obj = self.get_object()
+        old_status = request_obj.status
+
+        serializer.save()
+
+        new_status = serializer.instance.status
+        if old_status != new_status:
+            log_action(
+                user=self.request.user,
+                action='STATUS_CHANGE',
+                model_name='MaintenanceRequest',
+                object_id=request_obj.id,
+                object_display=f'{request_obj.asset.asset_name} - {new_status}',
+                old_values={'status': old_status},
+                new_values={'status': new_status},
+                request=self.request
+            )
+# END OF NEW CODE
 
 class BulkUpdateRequestStatusView(generics.GenericAPIView):
     permission_classes = [IsManager]
@@ -80,6 +108,20 @@ class BulkUpdateRequestStatusView(generics.GenericAPIView):
             return Response(
                 {'detail': f'Invalid status. Choose from {valid_statuses}'},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+
+        requests_to_update = MaintenanceRequest.objects.filter(id__in=request_ids)
+
+        for req in requests_to_update:
+            log_action(
+                user=request.user,
+                action='STATUS_CHANGE',
+                model_name='MaintenanceRequest',
+                object_id=req.id,
+                object_display=f'{req.asset.asset_name} - {new_status}',
+                old_values={'status': req.status},
+                new_values={'status': new_status},
+                request=request
             )
 
         updated = MaintenanceRequest.objects.filter(
@@ -145,6 +187,7 @@ class WorkOrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     def update(self, request, *args, **kwargs):
         partial  = kwargs.pop('partial', False)
         instance = self.get_object()
+        old_status = instance.status
         serializer = self.get_serializer(
             instance,
             data=request.data,
@@ -172,11 +215,22 @@ class WorkOrderDetailView(generics.RetrieveUpdateDestroyAPIView):
                 )
 
         serializer.save()
+
+        # LOGGING STATUS CHANGE
+        if old_status != new_status:
+            log_action(
+                user=request.user,
+                action='STATUS_CHANGE',
+                model_name='WorkOrder',
+                object_id=instance.id,
+                object_display=f'WO-{instance.id} - {new_status}',
+                old_values={'status': old_status},
+                new_values={'status': new_status},
+                request=request
+            )
+    
         return Response(serializer.data)
     
-    
-
-
 class MaintenanceHistoryListView(generics.ListAPIView):
     permission_classes = [IsManagerOrAuditor]
 

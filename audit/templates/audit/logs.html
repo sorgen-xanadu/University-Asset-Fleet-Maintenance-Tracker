@@ -1,0 +1,234 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Audit Logs | FleetTrack{% endblock %}
+
+{% block content %}
+
+<div class="mb-4">
+    <h4 class="fw-bold">Audit Logs</h4>
+    <p class="text-muted">Complete audit trail of all system changes</p>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">Action</label>
+                <select id="actionFilter" class="form-select">
+                    <option value="">All Actions</option>
+                    <option value="CREATE">Created</option>
+                    <option value="UPDATE">Updated</option>
+                    <option value="DELETE">Deleted</option>
+                    <option value="STATUS_CHANGE">Status Changed</option>
+                    <option value="APPROVE">Approved</option>
+                    <option value="REJECT">Rejected</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Model</label>
+                <select id="modelFilter" class="form-select">
+                    <option value="">All Models</option>
+                    <option value="Asset">Asset</option>
+                    <option value="MaintenanceRequest">Maintenance Request</option>
+                    <option value="WorkOrder">Work Order</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Date From</label>
+                <input type="date" id="dateFrom" class="form-control">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Search</label>
+                <input type="text" id="searchBox" class="form-control" placeholder="Object ID, Email, IP...">
+            </div>
+        </div>
+        <div class="mt-3">
+            <button id="filterBtn" class="btn btn-primary btn-sm">Apply Filters</button>
+            <button id="clearBtn" class="btn btn-secondary btn-sm">Clear Filters</button>
+        </div>
+    </div>
+</div>
+
+<!-- Logs Table -->
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Timestamp</th>
+                    <th>User</th>
+                    <th>Action</th>
+                    <th>Model</th>
+                    <th>Object</th>
+                    <th>IP Address</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody id="logsTable">
+                <tr>
+                    <td colspan="7" class="text-center text-muted py-4">Loading...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal for Details -->
+<div class="modal fade" id="detailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Audit Log Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="modalContent"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const API_URL = '/api/audit/';
+let currentPage = 1;
+
+// Fetch and display logs
+async function loadLogs() {
+    const action = document.getElementById('actionFilter').value;
+    const model = document.getElementById('modelFilter').value;
+    const search = document.getElementById('searchBox').value;
+    
+    let url = API_URL + '?ordering=-timestamp';
+    if (action) url += `&action=${action}`;
+    if (model) url += `&model_name=${model}`;
+    if (search) url += `&search=${search}`;
+    
+    try {
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const logs = data.results || data;
+        
+        let html = '';
+        
+        if (!logs || logs.length === 0) {
+            html = '<tr><td colspan="7" class="text-center text-muted py-4">No audit logs found</td></tr>';
+        } else {
+            logs.forEach(log => {
+                const actionColor = {
+                    'CREATE': 'success',
+                    'UPDATE': 'warning',
+                    'DELETE': 'danger',
+                    'STATUS_CHANGE': 'info',
+                    'APPROVE': 'success',
+                    'REJECT': 'danger'
+                }[log.action] || 'secondary';
+                
+                html += `
+                    <tr>
+                        <td>${new Date(log.timestamp).toLocaleString()}</td>
+                        <td>${log.user_name}<br><small class="text-muted">${log.user_email}</small></td>
+                        <td><span class="badge bg-${actionColor}">${log.action_display}</span></td>
+                        <td>${log.model_name}</td>
+                        <td>${log.object_display || 'N/A'}</td>
+                        <td><code class="text-xs">${log.ip_address || 'N/A'}</code></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" 
+                                    onclick="showDetails(${log.id})">
+                                View
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+        
+        document.getElementById('logsTable').innerHTML = html;
+    } catch (error) {
+        console.error('Error loading logs:', error);
+        document.getElementById('logsTable').innerHTML = 
+            '<tr><td colspan="7" class="text-center text-danger py-4">Error loading logs. Please check your permissions or try refreshing.</td></tr>';
+    }
+}
+
+// Show detailed view
+async function showDetails(logId) {
+    try {
+        const response = await fetch(`${API_URL}${logId}/`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+            }
+        });
+        
+        const log = await response.json();
+        
+        let html = `
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <strong>Timestamp:</strong> ${new Date(log.timestamp).toLocaleString()}
+                </div>
+                <div class="col-md-6">
+                    <strong>User:</strong> ${log.user_name} (${log.user_email})
+                </div>
+            </div>
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <strong>Action:</strong> ${log.action_display}
+                </div>
+                <div class="col-md-6">
+                    <strong>Model:</strong> ${log.model_name}
+                </div>
+            </div>
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <strong>Object ID:</strong> ${log.object_id}
+                </div>
+                <div class="col-md-6">
+                    <strong>IP Address:</strong> ${log.ip_address || 'N/A'}
+                </div>
+            </div>
+            <hr>
+            <div class="row">
+                <div class="col-md-6">
+                    <strong>Old Values:</strong>
+                    <pre class="bg-light p-2 rounded">${JSON.stringify(log.old_values, null, 2)}</pre>
+                </div>
+                <div class="col-md-6">
+                    <strong>New Values:</strong>
+                    <pre class="bg-light p-2 rounded">${JSON.stringify(log.new_values, null, 2)}</pre>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('modalContent').innerHTML = html;
+        new bootstrap.Modal(document.getElementById('detailsModal')).show();
+    } catch (error) {
+        console.error('Error loading details:', error);
+        alert('Error loading log details');
+    }
+}
+
+// Event listeners
+document.getElementById('filterBtn').addEventListener('click', loadLogs);
+document.getElementById('clearBtn').addEventListener('click', () => {
+    document.getElementById('actionFilter').value = '';
+    document.getElementById('modelFilter').value = '';
+    document.getElementById('searchBox').value = '';
+    loadLogs();
+});
+
+// Load on page load
+document.addEventListener('DOMContentLoaded', loadLogs);
+</script>
+
+{% endblock %}
