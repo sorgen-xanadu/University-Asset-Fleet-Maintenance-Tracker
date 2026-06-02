@@ -26,15 +26,6 @@ class MaintenanceRequestListCreateView(generics.ListCreateAPIView):
         
         return MaintenanceRequest.objects.filter(requested_by=user)
 
-    # def perform_create(self, serializer):
-    #     if self.request.user.is_read_only:
-    #         return Response(
-    #             {'detail': 'Auditors cannot submit requests.'},
-    #             status=status.HTTP_403_FORBIDDEN
-    #         )
-    #     serializer.save(requested_by=self.request.user)
-
-    # The above code is changed to this; we want to raise an exception instead of returning a response, since perform_create is not designed to return HTTP responses.
     def perform_create(self, serializer):
         if self.request.user.is_read_only:
             from rest_framework.exceptions import PermissionDenied
@@ -64,7 +55,6 @@ class MaintenanceRequestDetailView(generics.RetrieveUpdateDestroyAPIView):
 
         return obj
 
-# NEW CODE: Override update to log status changes
     def perform_update(self, serializer):
         request_obj = self.get_object()
         old_status = request_obj.status
@@ -83,7 +73,6 @@ class MaintenanceRequestDetailView(generics.RetrieveUpdateDestroyAPIView):
                 new_values={'status': new_status},
                 request=self.request
             )
-# END OF NEW CODE
 
 class BulkUpdateRequestStatusView(generics.GenericAPIView):
     permission_classes = [IsManager]
