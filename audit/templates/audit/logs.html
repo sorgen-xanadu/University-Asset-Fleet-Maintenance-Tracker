@@ -10,7 +10,6 @@
     <p class="text-muted">Complete audit trail of all system changes</p>
 </div>
 
-<!-- Filters -->
 <div class="card mb-4">
     <div class="card-body">
         <div class="row g-3">
@@ -24,6 +23,8 @@
                     <option value="STATUS_CHANGE">Status Changed</option>
                     <option value="APPROVE">Approved</option>
                     <option value="REJECT">Rejected</option>
+                    <option value="LOGIN">Login</option>
+                    <option value="LOGOUT">Logout</option>
                 </select>
             </div>
             <div class="col-md-3">
@@ -51,7 +52,6 @@
     </div>
 </div>
 
-<!-- Logs Table -->
 <div class="card">
     <div class="table-responsive" style="max-height: calc(100vh - 400px); overflow-y: auto;">
         <table class="table table-hover mb-0">
@@ -75,7 +75,6 @@
     </div>
 </div>
 
-<!-- Modal for Details -->
 <div class="modal fade" id="detailsModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -94,7 +93,20 @@
 const API_URL = '/api/audit/';
 let currentPage = 1;
 
-// Fetch and display logs
+// Helper function to format old/new values nicely
+function formatValues(values) {
+    if (!values || Object.keys(values).length === 0) {
+        return '<span class="text-muted">No changes</span>';
+    }
+    
+    let html = '';
+    for (const [key, value] of Object.entries(values)) {
+        const displayValue = value === null ? '<span class="text-muted">null</span>' : value;
+        html += `<div class="mb-2"><strong>${key}:</strong> ${displayValue}</div>`;
+    }
+    return html;
+}
+
 async function loadLogs() {
     const action = document.getElementById('actionFilter').value;
     const model = document.getElementById('modelFilter').value;
@@ -106,14 +118,19 @@ async function loadLogs() {
     if (search) url += `&search=${search}`;
     
     try {
+        const headers = {};
+        const token = localStorage.getItem('access_token');
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
         const response = await fetch(url, {
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-            }
+            credentials: 'include',
+            headers: headers
         });
         
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            throw new Error(`HTTP error! Status: ${response.status}`);
         }
         
         const data = await response.json();
@@ -131,7 +148,7 @@ async function loadLogs() {
                     'DELETE': 'danger',
                     'STATUS_CHANGE': 'info',
                     'APPROVE': 'success',
-                    'REJECT': 'danger'
+                    'REJECT': 'danger',
                     'LOGIN': 'success',
                     'LOGOUT': 'warning'
                 }[log.action] || 'secondary';
@@ -163,13 +180,17 @@ async function loadLogs() {
     }
 }
 
-// Show detailed view
 async function showDetails(logId) {
     try {
+        const headers = {};
+        const token = localStorage.getItem('access_token');
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
         const response = await fetch(`${API_URL}${logId}/`, {
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-            }
+            credentials: 'include',  
+            headers: headers         
         });
         
         const log = await response.json();
@@ -200,17 +221,26 @@ async function showDetails(logId) {
                 </div>
             </div>
             <hr>
+        `;
+        
+        if (log.old_values !== null || log.new_values !== null) {
+            html += `
             <div class="row">
                 <div class="col-md-6">
                     <strong>Old Values:</strong>
-                    <pre class="bg-light p-2 rounded">${JSON.stringify(log.old_values, null, 2)}</pre>
+                    <div class="bg-light p-2 rounded">
+                        ${formatValues(log.old_values)}
+                    </div>
                 </div>
                 <div class="col-md-6">
                     <strong>New Values:</strong>
-                    <pre class="bg-light p-2 rounded">${JSON.stringify(log.new_values, null, 2)}</pre>
+                    <div class="bg-light p-2 rounded">
+                        ${formatValues(log.new_values)}
+                    </div>
                 </div>
             </div>
-        `;
+            `;
+        }
         
         document.getElementById('modalContent').innerHTML = html;
         new bootstrap.Modal(document.getElementById('detailsModal')).show();
@@ -220,7 +250,6 @@ async function showDetails(logId) {
     }
 }
 
-// Event listeners
 document.getElementById('filterBtn').addEventListener('click', loadLogs);
 document.getElementById('clearBtn').addEventListener('click', () => {
     document.getElementById('actionFilter').value = '';
@@ -229,7 +258,6 @@ document.getElementById('clearBtn').addEventListener('click', () => {
     loadLogs();
 });
 
-// Load on page load
 document.addEventListener('DOMContentLoaded', loadLogs);
 </script>
 
