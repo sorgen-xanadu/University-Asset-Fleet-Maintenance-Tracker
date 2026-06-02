@@ -135,6 +135,14 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.AnonRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'user': '1000/hour',
+        'anon': '100/hour',
+    }
 }
 
 # Simple JWT
@@ -147,10 +155,33 @@ SIMPLE_JWT = {
 }
 
 # CORS — update with your Railway app URL after deployment
-CORS_ALLOWED_ORIGINS = config(
-    'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:3000,http://127.0.0.1:3000'
-).split(',')
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in config(
+        'CORS_ALLOWED_ORIGINS',
+        default='http://localhost:3000,http://127.0.0.1:3000'
+    ).split(',')
+]
+
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_METHODS = [
+    'GET',
+    'POST',
+    'PUT',
+    'PATCH',
+    'DELETE',
+    'OPTIONS',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+]
 
 # Session Configuration - Session timeout for web UI
 SESSION_COOKIE_AGE = 3600
@@ -158,3 +189,27 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_SAMESITE = 'Lax'
+
+# SSL/HTTPS Configuration - enforced in production
+SECURE_SSL_REDIRECT = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_HSTS_SECONDS = 31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_SECURITY_POLICY = {
+    'default-src': ("'self'",),
+    'script-src': ("'self'", "https://cdn.jsdelivr.net"),  # Allow Bootstrap CDN if used
+    'style-src': ("'self'", "https://cdn.jsdelivr.net"),    # Allow Bootstrap CDN if used
+    'img-src': ("'self'", "data:", "https:", "https://res.cloudinary.com"),  # Cloudinary
+    'font-src': ("'self'", "https://cdn.jsdelivr.net"),     # Bootstrap fonts
+    'connect-src': ("'self'", "https://api.cloudinary.com"), # API calls
+    'frame-ancestors': ("'none'",),                          # Clickjacking protection
+    'base-uri': ("'self'",),                                 # Prevents document.baseURI injection
+    'form-action': ("'self'",),                              # Form submission control
+    'upgrade-insecure-requests': (),                         # HTTP → HTTPS redirect
+}
+
+AUTHENTICATION_BACKENDS = [
+    'accounts.views.FailedLoginTrackingBackend',
+]
