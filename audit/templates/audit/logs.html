@@ -132,6 +132,8 @@ async function loadLogs() {
                     'STATUS_CHANGE': 'info',
                     'APPROVE': 'success',
                     'REJECT': 'danger'
+                    'LOGIN': 'success',
+                    'LOGOUT': 'warning'
                 }[log.action] || 'secondary';
                 
                 html += `

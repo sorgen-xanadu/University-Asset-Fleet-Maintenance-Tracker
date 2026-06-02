@@ -34,6 +34,8 @@ class AuditLogAdmin(admin.ModelAdmin):
             'APPROVE': '#17a2b8',
             'REJECT': '#e83e8c',
             'STATUS_CHANGE': '#007bff',
+            'LOGIN': '#20c997',
+            'LOGOUT': '#6f42c1',
         }
         color = colors.get(obj.action, '#6c757d')
         return format_html(
