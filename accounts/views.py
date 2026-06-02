@@ -18,7 +18,25 @@ class UserListCreateView(generics.ListCreateAPIView):
         if self.request.method == 'POST':
             return CreateUserSerializer
         return UserManagementSerializer
+    
+    def perform_create(self, serializer):
+        user = serializer.save()
 
+        # Log user creation
+        log_action(
+            user=self.request.user,
+            action='CREATE',
+            model_name='User',
+            object_id=user.id,
+            object_display=f'{user.get_full_name()} ({user.email}) - Role: {user.get_role_display()}',
+            new_values={
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'role': user.role,
+            },
+            request=self.request
+        )
 
 def login_view(request):
     if request.user.is_authenticated:
@@ -55,7 +73,7 @@ def logout_view(request):
         user = request.user
         logout(request)
 
-        # Log logout after session is destroyed
+        # Log logout action
         log_action(
             user=user,
             action='LOGOUT',
