@@ -57,6 +57,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     USERNAME_FIELD  = 'email'
     REQUIRED_FIELDS = ['first_name', 'last_name']
 
+    failed_login_attempts = models.IntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
+    last_failed_login = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         verbose_name        = 'User'
         verbose_name_plural = 'Users'
